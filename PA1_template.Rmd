@@ -1,25 +1,140 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "PA1_template.Rmd"
+output: html_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
-## Loading and preprocessing the data
+#Project submission
+####*loading data
+```{r libraries}
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+```
+```{r reading}
+###reading the df
+steps <- read.csv("/Users/jomr/Desktop/Coursera/Reproducible Research/activity.csv")
+```
+####*checking the structure and transforming df
+```{r str, cache=TRUE}
+str(steps)
+head(steps)
+#converting steps variable into date format
+steps$date <- ymd(steps$date)
+#converting into tbl_df
+steps <- tbl_df(steps)
+totalbyday <- dplyr::summarise(steps, totalsteps=sum(steps, na.rm=TRUE))
+```
+####*producing a histogram of the number of steps by day; then mean and then median; without missing values
+```{r hist, results="asis", cache=TRUE, fig.show = 'asis'}
+#grouping by date and summarising
+steps <- group_by(steps, date)
+totalbyday <- dplyr::summarise(steps, totalsteps=sum(steps, na.rm=TRUE))
+histogram1 <- hist(totalbyday$totalsteps, main="Total steps by day", xlab="Number of steps")
+```
+
+  
+*mean and median
+```{r mean, results='asis'}
+mean1 <- mean(totalbyday$totalsteps)
+median1 <- median(as.numeric(totalbyday$totalsteps))
+rm(totalbyday)
+print(paste("mean1=", mean1))  
 
 
-
-## What is mean total number of steps taken per day?
-
-
-
-## What is the average daily activity pattern?
+print(paste("median1=", median1))
+```
 
 
+```{r intervals1}
+#grouping by interval
+part2 <- group_by(steps, interval)
+part2 <- dplyr::summarise(part2, intervalmean=mean(steps, na.rm=TRUE))
+```
+  
 
-## Imputing missing values
+####*plotting mean number of steps by interval
+```{r plot1}
+plot(part2$interval, part2$intervalmean, type="l", main = "Mean number of steps by 5 minute interval", ylab="Mean number of steps", xlab="interval (min)")
+```
+  
+####*choosing the interval with the highest average  
+```{r interval1}
+highest <- part2[which.max(part2$intervalmean),1]
+print(highest[[1]])
+```
+  
+#####imputation
+```{r imputation, cache=TRUE}
+#getting and summing number of NA's
+imputeddf <- steps
+#imputing missings with the mean for each interval
+c <- as.numeric(which(is.na(imputeddf$steps)))
+for (i in c) {
+            testo <- subset(imputeddf, interval==as.numeric(imputeddf[i,3]), select=steps)
+            imputeddf$steps[[i]] <- mean(testo$steps,na.rm=TRUE)
+            rm(testo)
+} 
+rm(c,i)
+```
+####*producing histogram of steps by day in imputed df, then getting mean and median
+```{r histogram2, cache=TRUE, results="asis", fig.show='asis'}
+imputeddf <- group_by(imputeddf, date)
+histogramdf2 <- dplyr::summarize(imputeddf, totalsteps=sum(steps))
+histogram2 <- hist(histogramdf2$totalsteps, main="distribution of steps by day", xlab="total number of steps in a day")
 
 
+mean2 <- mean(histogramdf2$totalsteps)
+median2 <- median(as.numeric(histogramdf2$totalsteps))  
+print(paste("mean2=",mean2))
+print(paste("median2=",median2))
+```
 
-## Are there differences in activity patterns between weekdays and weekends?
+
+####*comparing means and medians before and after imputation
+```{r comparison, results="asis", warnings=FALSE}
+library(knitr)
+totalbyday <- dplyr::summarise(steps, totalsteps=sum(steps, na.rm=TRUE))
+mean1 <- mean(totalbyday$totalsteps)
+median1 <- median(as.numeric(totalbyday$totalsteps))
+mean2 <- mean(histogramdf2$totalsteps)
+median2 <- median(as.numeric(histogramdf2$totalsteps))
+compare <- data.frame(c(mean1, mean2), c(median1, median2), row.names=c("original", "imputed"))
+colnames(compare)=c("mean", "median")
+knitr::kable(compare, caption="mean and median comparison")
+```
+
+
+####*building side by side histograms for comparison
+```{r histcompare}
+dev.set(which=2)
+par(mfrow=c(1,2))
+plot(histogram1, xlab="count of total steps by day", main="Original df")
+plot(histogram2, xlab="count of total steps by day", main="Imputed df")
+par(mfrow=c(1,1)) #setting original graphing pars
+```
+
+```{r weekday}
+####adding weekday column to imputeddf
+imputeddf <- mutate(imputeddf, day=weekdays(date))
+for (i in seq_along(1:length(imputeddf$day)))
+if (imputeddf$day[[i]] == "Saturday"){imputeddf$weekend[[i]] <- "weekend"} else 
+      if (imputeddf$day[[i]] =="Sunday"){imputeddf$weekend[[i]] <- "weekend"
+} else {
+            imputeddf$weekend[[i]] <- "weekday"
+            }
+```
+
+```{r final df}
+###making summary data frame
+weekdayweekend <- group_by(imputeddf, weekend, interval)
+wdwkaveraged <- dplyr::summarise(weekdayweekend, averagesteps=mean(steps))
+```
+###last plot :)
+```{r lastplot}
+p <- ggplot(data=wdwkaveraged, aes(x=interval, y=averagesteps))
+p+geom_line()+facet_grid(weekend~.)+theme_classic()+ylab("Average steps per interval")+xlab("interval (min)")
+```
